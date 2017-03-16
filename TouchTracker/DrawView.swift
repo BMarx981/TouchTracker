@@ -8,10 +8,13 @@
 
 import UIKit
 
-class DrawView: UIView {
+class DrawView: UIView, UIGestureRecognizerDelegate {
     //var currentLine: Line?
     var currentLines = [NSValue: Line]()
     var finishedLines = [Line]()
+    
+    //This property observer sets the menu controller to be not visible 
+    //if the index is set to nil
     var selectedLineIndex: Int? {
         didSet {
             if selectedLineIndex == nil {
@@ -21,9 +24,12 @@ class DrawView: UIView {
         }
     }
     
+    var moveRecognizer: UIPanGestureRecognizer!
+    
     required init?(coder aDecoder: NSCoder) {
         super.init(coder: aDecoder)
         
+        //These variables set in the init determine the behaviours of the touches
         let doubleTapRecognizer = UITapGestureRecognizer(target: self, action: #selector(DrawView.doubleTap(_:)))
         doubleTapRecognizer.numberOfTapsRequired = 2
         doubleTapRecognizer.delaysTouchesBegan = true
@@ -33,6 +39,21 @@ class DrawView: UIView {
         tapRecognizer.delaysTouchesBegan = true
         tapRecognizer.require(toFail: doubleTapRecognizer)
         addGestureRecognizer(tapRecognizer)
+        
+        let longPressRecognizer = UILongPressGestureRecognizer(target: self, action: #selector(DrawView.longPress(_:)))
+        addGestureRecognizer(longPressRecognizer)
+        
+        moveRecognizer = UIPanGestureRecognizer(target: self, action: #selector(DrawView.moveLine(_:)))
+        //This line sets the DrawView class to be the delegate
+        moveRecognizer.delegate = self
+        moveRecognizer.cancelsTouchesInView = false
+        addGestureRecognizer(moveRecognizer)
+    }
+    
+    //This is a delegate function which will allow there to be more than one gesture Recognized at
+    //At a time
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        return true
     }
     
     func doubleTap(_ gestureRecognizer: UIGestureRecognizer) {
@@ -42,6 +63,34 @@ class DrawView: UIView {
         currentLines.removeAll()
         finishedLines.removeAll()
         setNeedsDisplay()
+    }
+    
+    func moveLine(_ gestureRecognizer: UIPanGestureRecognizer) {
+        print("Recognized a pan")
+        
+        //If a line is selected...
+        if let index = selectedLineIndex {
+            //When the pan recognizer changes its position...
+            if gestureRecognizer.state == .changed {
+                //How far has the pan moved?
+                let translation = gestureRecognizer.translation(in: self)
+                
+                //Add the translation to the current begining and end points of the line
+                //make sure there are no copy and paste typos!
+                finishedLines[index].begin.x += translation.x
+                finishedLines[index].begin.y += translation.y
+                finishedLines[index].end.x += translation.x
+                finishedLines[index].end.y += translation.y
+                
+                gestureRecognizer.setTranslation(CGPoint.zero, in: self)
+                
+                //redraw the screen
+                setNeedsDisplay()
+            }
+        } else {
+            //if no line is selected, do not do anything
+            return
+        }
     }
     
     func tap(_ gestureRecognizer: UIGestureRecognizer) {
@@ -88,6 +137,24 @@ class DrawView: UIView {
     //This is if there is a custom view class that needs to become the firstResponder
     override var canBecomeFirstResponder: Bool {
         return true
+    }
+    
+    func longPress(_ gestureRecognizer: UIGestureRecognizer) {
+        print("Recognized a long press")
+        
+        if gestureRecognizer.state == .began {
+            let point = gestureRecognizer.location(in: self)
+            
+            selectedLineIndex = indexOfLine(at: point)
+            
+            if selectedLineIndex != nil {
+                currentLines.removeAll()
+            }
+        } else if gestureRecognizer.state == .ended {
+            selectedLineIndex = nil
+        }
+        
+        setNeedsDisplay()
     }
     
     @IBInspectable var finishedLineColor: UIColor = UIColor.black {
